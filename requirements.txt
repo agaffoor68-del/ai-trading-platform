@@ -1,0 +1,22 @@
+# Core
+fastapi>=0.115
+uvicorn[standard]>=0.30
+pydantic>=2.7
+httpx>=0.27
+
+# Data
+yfinance>=0.2.50
+pandas>=2.2
+numpy>=2.0
+
+# AI / Optimization
+optuna>=4.0
+
+# Broker SDKs (Phase 3 — uncomment when credentials available)
+# kiteconnect>=1.4
+# smartapi-python>=1.4
+# kotakneoapi>=3.0
+
+# Dev / Test
+pytest>=8.0
+pytest-asyncio>=0.24

@@ -1,0 +1,38 @@
+{
+ "orders": [
+  {
+   "order_id": "P-170B15C5",
+   "symbol": "RELIANCE",
+   "side": "BUY",
+   "qty": 1,
+   "price": 1181.0,
+   "order_type": "MARKET",
+   "product": "MIS",
+   "status": "FILLED",
+   "mode": "paper",
+   "ts": "2026-10-08 04:17:36"
+  }
+ ],
+ "positions": {
+  "RELIANCE": {
+   "qty": 1,
+   "avg": 1181.0
+  }
+ },
+ "trades": [
+  {
+   "id": "P-170B15C5",
+   "date": "2026-10-08",
+   "time": "04:17:36",
+   "symbol": "RELIANCE",
+   "side": "BUY",
+   "qty": 1,
+   "entry": 1181.0,
+   "exit": 1181.0,
+   "pnl": 0.0,
+   "mode": "paper",
+   "strategy": "manual"
+  }
+ ],
+ "kill": false
+}

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Data / logs / secrets
+data/candles/
+logs/
+*.log
+.env
+env_check*.txt
+install_log.txt
+
+# IDE / Node
+.vscode/
+node_modules/
+.next/
