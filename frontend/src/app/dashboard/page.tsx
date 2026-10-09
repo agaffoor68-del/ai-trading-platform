@@ -1,412 +1,255 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BrainCircuit, Newspaper, Radio } from "lucide-react";
-import { KpiRow } from "@/components/dashboard/kpi-cards";
+import { Loader2, Play, Download } from "lucide-react";
+import { toast } from "sonner";
 import {
-  CandlestickChart,
-  type TradeMarker,
-} from "@/components/chart/candlestick-chart";
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge, Skeleton } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input, Select } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/badge";
 import { apiGet, apiPost } from "@/lib/api";
-import { useAppStore } from "@/lib/store";
 import { cn, pctClass } from "@/lib/utils";
 
-/* ---------------------------------------------------------------------------
-   Main dashboard (spec grid): KPI tiles → chart → AI insights + order book
-   → positions table → AI learning log.
---------------------------------------------------------------------------- */
+/* Backtest engine + results (spec route /dashboard/backtest). */
 
-interface Position {
-  symbol: string;
-  side: "LONG" | "SHORT";
-  qty: number;
-  entry: number;
-  ltp: number;
-  pnl: number;
-  mode: "paper" | "live";
-}
-
-interface AiInsight {
-  bias: "Bullish" | "Bearish" | "Neutral";
-  confidence: number;
-  summary: string;
-  top_picks: {
-    symbol: string;
-    confidence: number;
-    entry: number;
-    sl: number;
-    target: number;
-    reason: string;
+interface BacktestResult {
+  metrics: Record<string, number>;
+  trades: {
+    side: string;
+    qty: number;
+    entry_time: string;
+    exit_time: string | null;
+    entry_price: number;
+    exit_price: number | null;
+    pnl: number;
+    return_pct: number;
+    costs: number;
   }[];
+  equity_curve: { date: string; equity: number }[];
 }
 
-interface LearningLogEntry {
-  time: string;
-  text: string;
-}
+const STATS: { key: string; label: string; pct?: boolean }[] = [
+  { key: "total_return_pct", label: "Total Return", pct: true },
+  { key: "sharpe", label: "Sharpe" },
+  { key: "sortino", label: "Sortino" },
+  { key: "max_drawdown_pct", label: "Max DD", pct: true },
+  { key: "win_rate_pct", label: "Win Rate", pct: true },
+  { key: "profit_factor", label: "Profit Factor" },
+  { key: "n_trades", label: "Trades" },
+  { key: "total_costs", label: "Costs (₹)" },
+];
 
-export default function DashboardPage() {
-  const symbol = useAppStore((s) => s.symbol);
-  const [trades, setTrades] = useState<TradeMarker[]>([]);
+export default function BacktestPage() {
+  const [symbol, setSymbol] = useState("RELIANCE");
+  const [strategy, setStrategy] = useState("ema_crossover");
+  const [period, setPeriod] = useState("2y");
+  const [capital, setCapital] = useState(100000);
+  const [fast, setFast] = useState(20);
+  const [slow, setSlow] = useState(50);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<BacktestResult | null>(null);
 
-  const { data: kpis } = useQuery({
-    queryKey: ["kpis"],
+  const { data: strategies } = useQuery({
+    queryKey: ["strategies"],
     queryFn: () =>
-      apiGet<{
-        portfolio_value: number;
-        today_pnl: number;
-        today_pnl_pct: number;
-        win_rate: number;
-        active_positions: number;
-        portfolio_series: number[];
-      }>("/api/positions/summary"),
-    refetchInterval: 15000,
+      apiGet<{ strategies: { id: string; name: string }[] }>("/api/strategy/list").then((d) => ({
+        strategies: d.strategies.map((s) => s.id ?? s.name),
+      })),
   });
 
-  const { data: positions, isLoading: posLoading } = useQuery({
-    queryKey: ["positions"],
-    queryFn: () => apiGet<{ positions: Position[] }>("/api/positions"),
-    refetchInterval: 10000,
-  });
-
-  const { data: insights, isLoading: aiLoading } = useQuery({
-    queryKey: ["ai-insights"],
-    queryFn: () => apiGet<AiInsight>("/api/ai/insights"),
-    refetchInterval: 5 * 60 * 1000,
-  });
-
-  const { data: learningLog } = useQuery({
-    queryKey: ["learning-log"],
-    queryFn: () =>
-      apiGet<{ entries: LearningLogEntry[] }>("/api/ai/learning-log"),
-    refetchInterval: 60 * 60 * 1000,
-  });
-
-  const { data: tradesData } = useQuery({
-    queryKey: ["chart-trades", symbol],
-    queryFn: () =>
-      apiGet<{ markers: TradeMarker[] }>(
-        `/api/trades/history?symbol=${encodeURIComponent(symbol)}&as_markers=true`
-      ),
-  });
-
-  useEffect(() => {
-    if (tradesData?.markers) setTrades(tradesData.markers);
-  }, [tradesData]);
-
-  return (
-    <div className="space-y-4">
-      <KpiRow
-        portfolio={kpis?.portfolio_value ?? 100000}
-        todayPnl={kpis?.today_pnl ?? 0}
-        todayPnlPct={kpis?.today_pnl_pct ?? 0}
-        winRate={kpis?.win_rate ?? 0}
-        activePositions={kpis?.active_positions ?? 0}
-        portfolioSpark={kpis?.portfolio_series}
-        pnlSpark={kpis?.portfolio_series?.map((v, i, a) => v - (a[i - 1] ?? v))}
-      />
-
-      <CandlestickChart symbol={symbol} trades={trades} height={440} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <AiInsightsPanel insights={insights} loading={aiLoading} />
-        <OrderBookPanel />
-      </div>
-
-      <Card>
-        <CardHeader className="flex-row items-center justify-between">
-          <CardTitle className="text-foreground">Open Positions</CardTitle>
-          <Badge variant="success">
-            <Radio className="mr-1 h-3 w-3" /> LIVE P&L
-          </Badge>
-        </CardHeader>
-        <CardContent>
-          {posLoading ? (
-            <Skeleton className="h-32 w-full" />
-          ) : !positions?.positions.length ? (
-            <EmptyState
-              title="No open positions"
-              desc="Paper terminal se trade place karein ya AI strategy deploy karein."
-            />
-          ) : (
-            <PositionsTable positions={positions.positions} />
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="ai-panel">
-        <div className="ai-panel-inner">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="flex items-center gap-2 text-sm font-semibold">
-              <BrainCircuit className="h-4 w-4 text-primary" />
-              AI Learning Log
-            </h3>
-            <Badge>Updated hourly</Badge>
-          </div>
-          <ul className="space-y-2 text-sm">
-            {(learningLog?.entries ?? DEFAULT_LOG).map((e, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="shrink-0 font-mono text-xs text-primary">
-                  {e.time}
-                </span>
-                <span className="text-text-muted">{e.text}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------ sub-components */
-
-function AiInsightsPanel({
-  insights,
-  loading,
-}: {
-  insights?: AiInsight;
-  loading: boolean;
-}) {
-  const deploy = async (symbol: string) => {
-    const { toast } = await import("sonner");
+  const run = async () => {
+    setRunning(true);
     try {
-      await apiPost("/api/strategy/deploy", { symbol, target: "paper" });
-      toast.success(`${symbol} strategy deployed to PAPER trading`);
+      const params =
+        strategy === "ema_crossover"
+          ? { fast, slow }
+          : strategy === "rsi_reversion"
+            ? { period: 14, oversold: 30, overbought: 70 }
+            : strategy === "supertrend_follow"
+              ? { period: 10, multiplier: 3 }
+              : {};
+      const res = await apiPost<BacktestResult & { id: string }>("/api/backtest/run", {
+        symbol, strategy, params, period, initial_capital: capital,
+      });
+      setResult(res);
+      toast.success(`Backtest done: ${res.metrics.total_return_pct}% return`);
     } catch (e) {
-      toast.error("Deploy failed", { description: (e as Error).message });
+      toast.error("Backtest failed", { description: (e as Error).message });
+    } finally {
+      setRunning(false);
     }
   };
 
-  return (
-    <div className="ai-panel">
-      <div className="ai-panel-inner flex h-full flex-col">
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="flex items-center gap-2 text-sm font-semibold">
-            <BrainCircuit className="h-4 w-4 text-primary" />
-            AI Insights
-          </h3>
-          {insights && (
-            <Badge
-              variant={
-                insights.bias === "Bullish"
-                  ? "success"
-                  : insights.bias === "Bearish"
-                    ? "danger"
-                    : "warning"
-              }
-            >
-              {insights.bias} · {insights.confidence}%
-            </Badge>
-          )}
-        </div>
-
-        {loading || !insights ? (
-          <Skeleton className="h-40 w-full" />
-        ) : (
-          <>
-            <p className="mb-3 text-sm leading-relaxed text-text-muted">
-              {insights.summary}
-            </p>
-            <div className="space-y-2">
-              {insights.top_picks.map((p) => (
-                <div
-                  key={p.symbol}
-                  className="flex items-center justify-between rounded-lg border border-border bg-background/40 px-3 py-2"
-                >
-                  <div>
-                    <div className="font-mono text-sm font-bold">{p.symbol}</div>
-                    <div className="text-xs text-text-muted">
-                      E ₹{p.entry} · SL ₹{p.sl} · T ₹{p.target}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ConfidenceRing value={p.confidence} />
-                    <button
-                      onClick={() => deploy(p.symbol)}
-                      className="rounded-md border border-success/40 bg-success/10 px-2 py-1 text-[11px] font-semibold text-success transition hover:bg-success/20"
-                    >
-                      Deploy Paper
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Circular confidence meter (SVG ring). */
-function ConfidenceRing({ value }: { value: number }) {
-  const r = 16;
-  const c = 2 * Math.PI * r;
-  const offset = c - (value / 100) * c;
-  return (
-    <div className="relative h-10 w-10" title={`Confidence ${value}%`}>
-      <svg viewBox="0 0 40 40" className="h-10 w-10 -rotate-90">
-        <circle cx="20" cy="20" r={r} fill="none" stroke="#1F2937" strokeWidth="3" />
-        <circle
-          cx="20"
-          cy="20"
-          r={r}
-          fill="none"
-          stroke="#00E5FF"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeDasharray={c}
-          strokeDashoffset={offset}
-        />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-mono text-[10px] font-bold text-primary">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/** Live depth chart (bid/ask) — from backend market depth endpoint. */
-function OrderBookPanel() {
-  const symbol = useAppStore((s) => s.symbol);
-  const { data } = useQuery({
-    queryKey: ["orderbook"],
-    queryFn: () =>
-      apiGet<{
-        bids: { price: number; qty: number }[];
-        asks: { price: number; qty: number }[];
-      }>(`/api/market/depth?symbol=${symbol}`),
-    refetchInterval: 5000,
+  /* Equity + drawdown series (peak-to-trough %). */
+  const chartData = (result?.equity_curve ?? []).map((p, i, arr) => {
+    const peak = Math.max(...arr.slice(0, i + 1).map((x) => x.equity));
+    return { date: p.date, equity: p.equity, dd: (p.equity / peak - 1) * 100 };
   });
 
-  const bids = data?.bids?.slice(0, 5) ?? [];
-  const asks = data?.asks?.slice(0, 5) ?? [];
+  const exportCsv = () => {
+    if (!result) return;
+    const header = "entry,exit,side,qty,entry_price,exit_price,pnl,return_pct,costs";
+    const rows = result.trades.map((t) =>
+      [t.entry_time, t.exit_time, t.side, t.qty, t.entry_price, t.exit_price, t.pnl, t.return_pct, t.costs].join(",")
+    );
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${symbol}_backtest_trades.csv`;
+    a.click();
+    toast.success("CSV exported");
+  };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-foreground">Order Book · Depth</CardTitle>
-      </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-4 font-mono text-xs tabular">
-        <div>
-          <div className="mb-1 grid grid-cols-2 text-text-muted">
-            <span>Bid Qty</span>
-            <span className="text-right">Bid</span>
-          </div>
-          {bids.length === 0 && <Skeleton className="h-24 w-full" />}
-          {bids.map((b, i) => (
-            <div key={i} className="relative grid grid-cols-2 py-0.5">
-              <div
-                className="absolute inset-y-0 left-0 bg-success/10"
-                style={{ width: `${Math.min((b.qty / 5000) * 100, 100)}%` }}
-              />
-              <span className="relative text-success">{b.qty}</span>
-              <span className="relative text-right text-success">
-                {b.price.toFixed(2)}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div>
-          <div className="mb-1 grid grid-cols-2 text-text-muted">
-            <span className="text-right">Ask</span>
-            <span className="text-right">Ask Qty</span>
-          </div>
-          {asks.length === 0 && <Skeleton className="h-24 w-full" />}
-          {asks.map((a, i) => (
-            <div key={i} className="grid grid-cols-2 py-0.5">
-              <span className="text-danger">{a.price.toFixed(2)}</span>
-              <span className="text-right text-danger">{a.qty}</span>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
+    <div className="space-y-4">
+      <h1 className="text-lg font-bold tracking-tight">Backtest Lab</h1>
 
-/** Color-coded live P&L positions table. */
-function PositionsTable({ positions }: { positions: Position[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b border-border text-left text-xs text-text-muted">
-            <th className="py-2 pr-4">Symbol</th>
-            <th className="py-2 pr-4">Side</th>
-            <th className="py-2 pr-4 text-right">Qty</th>
-            <th className="py-2 pr-4 text-right">Entry</th>
-            <th className="py-2 pr-4 text-right">LTP</th>
-            <th className="py-2 pr-4 text-right">P&L</th>
-            <th className="py-2 text-right">Mode</th>
-          </tr>
-        </thead>
-        <tbody className="font-mono tabular">
-          {positions.map((p) => (
-            <tr
-              key={p.symbol}
-              className="border-b border-border/50 transition hover:bg-white/[0.03]"
-            >
-              <td className="py-2.5 pr-4 font-semibold">{p.symbol}</td>
-              <td className="py-2.5 pr-4">
-                <Badge variant={p.side === "LONG" ? "success" : "danger"}>
-                  {p.side}
-                </Badge>
-              </td>
-              <td className="py-2.5 pr-4 text-right">{p.qty}</td>
-              <td className="py-2.5 pr-4 text-right">{p.entry.toFixed(2)}</td>
-              <td className="py-2.5 pr-4 text-right">{p.ltp.toFixed(2)}</td>
-              <td
-                className={cn(
-                  "py-2.5 pr-4 text-right font-semibold",
-                  pctClass(p.pnl)
-                )}
-              >
-                {p.pnl >= 0 ? "+" : "-"}₹{Math.abs(p.pnl).toFixed(0)}
-              </td>
-              <td className="py-2.5 text-right">
-                <Badge variant={p.mode === "live" ? "danger" : "default"}>
-                  {p.mode.toUpperCase()}
-                </Badge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {/* Inputs */}
+      <Card>
+        <CardContent className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-xs text-text-muted">
+            Symbol (NSE)
+            <Input
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              className="mt-1 font-mono"
+            />
+          </label>
+          <label className="text-xs text-text-muted">
+            Strategy
+            <Select value={strategy} onChange={(e) => setStrategy(e.target.value)} className="mt-1">
+              {(strategies?.strategies ?? ["ema_crossover"]).map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-xs text-text-muted">
+            Period
+            <Select value={period} onChange={(e) => setPeriod(e.target.value)} className="mt-1">
+              {["6mo", "1y", "2y", "5y", "max"].map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </Select>
+          </label>
+          <label className="text-xs text-text-muted">
+            Initial Capital (₹)
+            <Input
+              type="number"
+              value={capital}
+              onChange={(e) => setCapital(Number(e.target.value))}
+              className="mt-1 font-mono"
+            />
+          </label>
+
+          {strategy === "ema_crossover" && (
+            <>
+              <label className="text-xs text-text-muted">
+                Fast EMA
+                <Input type="number" value={fast} onChange={(e) => setFast(Number(e.target.value))} className="mt-1 font-mono" />
+              </label>
+              <label className="text-xs text-text-muted">
+                Slow EMA
+                <Input type="number" value={slow} onChange={(e) => setSlow(Number(e.target.value))} className="mt-1 font-mono" />
+              </label>
+            </>
+          )}
+
+          <div className="flex items-end gap-2 lg:col-span-2">
+            <Button onClick={run} disabled={running} className="neon-active">
+              {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Run Backtest
+            </Button>
+            {result && (
+              <Button variant="outline" onClick={exportCsv}>
+                <Download className="h-4 w-4" /> CSV
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {running && <Skeleton className="h-40 w-full" />}
+
+      {result && (
+        <>
+          {/* Stats tiles */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
+            {STATS.map(({ key, label, pct }) => {
+              const v = result.metrics[key] ?? 0;
+              return (
+                <div key={key} className="glass-card p-3">
+                  <div className="text-[11px] text-text-muted">{label}</div>
+                  <div
+                    className={cn(
+                      "font-mono text-lg font-bold tabular",
+                      pct ? pctClass(v as number) : "text-foreground"
+                    )}
+                  >
+                    {pct ? `${v}%` : v}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Equity curve */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Equity Curve</CardTitle>
+            </CardHeader>
+            <CardContent className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData}>
+                  <XAxis dataKey="date" stroke="#1F2937" fontSize={10} tickFormatter={(d) => d.slice(2, 7)} />
+                  <YAxis stroke="#1F2937" fontSize={10} domain={["auto", "auto"]} />
+                  <Tooltip
+                    contentStyle={{ background: "#111827", border: "1px solid #1F2937", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "#9CA3AF" }}
+                  />
+                  <Line type="monotone" dataKey="equity" stroke="#00E5FF" dot={false} strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+
+          {/* Drawdown area chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-foreground">Drawdown %</CardTitle>
+            </CardHeader>
+            <CardContent className="h-44">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <XAxis dataKey="date" stroke="#1F2937" fontSize={10} tickFormatter={(d) => d.slice(2, 7)} />
+                  <YAxis stroke="#1F2937" fontSize={10} />
+                  <Tooltip
+                    contentStyle={{ background: "#111827", border: "1px solid #1F2937", borderRadius: 8, fontSize: 12 }}
+                    labelStyle={{ color: "#9CA3AF" }}
+                  />
+                  <Area type="monotone" dataKey="dd" stroke="#FF3B5C" fill="rgba(255,59,92,0.25)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {!result && !running && (
+        <p className="text-center text-sm text-text-muted">
+          Run a backtest on real Yahoo data to see equity curve, drawdown, and trades.
+        </p>
+      )}
     </div>
   );
 }
-
-function EmptyState({ title, desc }: { title: string; desc: string }) {
-  return (
-    <div className="flex flex-col items-center gap-1 py-8 text-center">
-      <Newspaper className="h-8 w-8 text-border" />
-      <p className="text-sm font-medium">{title}</p>
-      <p className="max-w-sm text-xs text-text-muted">{desc}</p>
-    </div>
-  );
-}
-
-/* Fallback learning log (backend not reachable / first run). */
-const DEFAULT_LOG: LearningLogEntry[] = [
-  {
-    time: "09:15",
-    text: "Auto-deployed supertrend_follow (10,3) on PAPER — pre-market scan score 0.71",
-  },
-  {
-    time: "12:00",
-    text: "Midday check: NIFTY momentum fading, position target 50% → 25%",
-  },
-  {
-    time: "15:30",
-    text: "EOD review: 2/3 paper trades closed green. Rolling 30d win-rate: 58%.",
-  },
-  {
-    time: "18:00",
-    text: "Nightly tune queued: ema_crossover re-optimization on walk-forward folds.",
-  },
-];
