@@ -59,7 +59,6 @@ export default function BacktestPage() {
   const [slow, setSlow] = useState(50);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
-  const [runId, setRunId] = useState<string | null>(null);
 
   const { data: strategies } = useQuery({
     queryKey: ["strategies"],
@@ -84,7 +83,6 @@ export default function BacktestPage() {
         symbol, strategy, params, period, initial_capital: capital,
       });
       setResult(res);
-      setRunId(res.id);
       toast.success(`Backtest done: ${res.metrics.total_return_pct}% return`);
     } catch (e) {
       toast.error("Backtest failed", { description: (e as Error).message });
