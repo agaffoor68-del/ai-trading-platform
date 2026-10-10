@@ -161,7 +161,12 @@ export function CandlestickChart({
     chart.subscribeCrosshairMove((param) => {
       const tip = tooltipRef.current;
       if (!tip) return;
-      if (!param.time || param.point.x < 0 || param.point.y < 0) {
+      if (
+        !param.time ||
+        !param.point ||
+        param.point.x < 0 ||
+        param.point.y < 0
+      ) {
         tip.style.display = "none";
         return;
       }
