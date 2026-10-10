@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { apiPost } from "@/lib/api";
 import { useAppStore } from "@/lib/store";
 
-/* Login page — Google OAuth primary + demo fallback (until OAuth keys added). */
+/* Login page — Google OAuth primary with demo fallback. */
 export default function LoginPage() {
   const router = useRouter();
   const setSession = useAppStore((s) => s.setSession);
@@ -106,10 +106,8 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs leading-relaxed text-text-muted">
-          Google login ke liye ek baar{" "}
-          <span className="text-primary">Settings → OAuth Wizard</span> me Client
-          ID paste karein. Demo mode sab features paper trading ke saath try
-          karta hai.
+          Google login is active. If Google rejects the redirect, add the current app URL plus{" "}
+          <span className="text-primary">/auth/google/callback</span> to the OAuth client&apos;s authorized redirect URIs. Demo mode remains available for paper trading.
         </p>
       </div>
     </main>
