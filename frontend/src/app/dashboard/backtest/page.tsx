@@ -17,7 +17,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-import { Badge, Skeleton } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/badge";
 import { apiGet, apiPost } from "@/lib/api";
 import { cn, pctClass } from "@/lib/utils";
 
