@@ -34,10 +34,10 @@ export function OAuthWizard({ cfg, loading }: { cfg?: Cfg; loading: boolean }) {
           <li><b className="text-foreground">Create Credentials → OAuth client ID → Web application</b></li>
           <li>Redirect URI add karein:
             <button
-              onClick={() => copy("http://localhost:8000/auth/google/callback")}
+              onClick={() => copy("https://ai-trading-platform-38xs.onrender.com/auth/google/callback")}
               className="ml-2 inline-flex items-center gap-1 rounded border border-border bg-background px-2 py-0.5 font-mono text-xs text-primary hover:bg-white/5"
             >
-              http://localhost:8000/auth/google/callback <Copy className="h-3 w-3" />
+              https://ai-trading-platform-38xs.onrender.com/auth/google/callback <Copy className="h-3 w-3" />
             </button>
           </li>
           <li>Client ID + Secret copy karke backend <b className="font-mono text-foreground">.env</b> me:

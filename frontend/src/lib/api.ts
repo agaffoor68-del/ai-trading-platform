@@ -36,9 +36,8 @@ export function connectLiveTicks(
 
   const connect = () => {
     if (closed) return;
-    const proto = window.location.protocol === "https:" ? "wss" : "ws";
-    // Next.js rewrites don't proxy WS in dev — hit backend directly as fallback.
-    const url = `${proto}://${window.location.hostname}:8000/ws/live`;
+    const backend = "https://ai-trading-platform-38xs.onrender.com";
+    const url = `${backend.replace(/^http/, "ws")}/ws/live`;
     ws = new WebSocket(url);
     ws.onopen = () => {
       retry = 1000;
