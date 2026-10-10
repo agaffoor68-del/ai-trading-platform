@@ -518,23 +518,6 @@ function PopupRow({ k, v, cls }: { k: string; v: string; cls?: string }) {
 }
 
 /* ------------------------------------------------------------ helpers */
-/** Range selector → yfinance period string. */
-function rangeToPeriod(r: string): string {
-  switch (r) {
-    case "1D":
-    case "1W":
-      return "5d";
-    case "1M":
-      return "1mo";
-    case "3M":
-      return "3mo";
-    case "1Y":
-      return "1y";
-    default:
-      return "max";
-  }
-}
-
 /** Simple moving average of close. */
 function sma(data: Candle[], p: number): LineData[] {
   const out: LineData[] = [];
