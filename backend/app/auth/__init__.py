@@ -104,6 +104,6 @@ def config_status():
         "authlib_installed": has_authlib,
         "llm_key": bool(os.getenv("LLM_API_KEY", "")),
         "hint": ("Google Cloud Console -> Credentials -> Create OAuth client ID (Web app) -> "
-                 "redirect URI: use the same app origin + /auth/google/callback -> "
-                 ".env me GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET likhein."),
+                 "redirect URI: OAUTH_REDIRECT_URI (or this API origin + /auth/google/callback) -> "
+                 "backend environment me GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET set karein."),
     }

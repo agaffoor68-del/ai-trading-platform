@@ -20,6 +20,10 @@ CANDLE_DIR.mkdir(parents=True, exist_ok=True)
 ENV = os.getenv("APP_ENV", "development")
 DEBUG = ENV == "development"
 
+# Public URLs used by the OAuth callback when the API is deployed separately.
+FRONTEND_URL = os.getenv("FRONTEND_URL", os.getenv("NEXTAUTH_URL", "http://localhost:3000")).rstrip("/")
+OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "").strip() or None
+
 # Safety: live trading is HARD-DISABLED until Phase 3 explicitly enables it.
 TRADING_MODE = os.getenv("TRADING_MODE", "paper")  # "paper" | "live"
 assert TRADING_MODE in ("paper", "live"), "TRADING_MODE must be paper|live"
