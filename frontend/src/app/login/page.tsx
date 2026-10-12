@@ -16,7 +16,6 @@ export default function LoginPage() {
   const googleLogin = async () => {
     setLoading("google");
     try {
-      // Backend redirects to Google (or returns 501 if OAuth not configured)
       const res = await fetch("/auth/google", { credentials: "include" });
       if (res.redirected) {
         window.location.href = res.url;
@@ -27,13 +26,19 @@ export default function LoginPage() {
         window.location.href = body.auth_url;
         return;
       }
-      throw new Error(body.detail ?? "Google OAuth not configured yet");
+      if (res.status === 501) {
+        const data = await apiPost<{ email: string; name: string; mode: string }>(
+          "/auth/demo-login"
+        );
+        setSession({ email: data.email, name: data.name, mode: "demo" });
+        toast.info("Google OAuth is not configured, so Demo Terminal was opened.");
+        router.push("/dashboard");
+        return;
+      }
+      throw new Error(body.detail ?? "Google login failed");
     } catch (e) {
-      toast.error("Google login unavailable", {
-        description:
-          e instanceof Error
-            ? `${e.message} — Settings wizard se OAuth Client ID add karein, ya Demo use karein.`
-            : "Unknown error",
+      toast.error("Login failed", {
+        description: e instanceof Error ? e.message : "Backend running?",
       });
       setLoading(null);
     }
@@ -106,8 +111,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-6 text-center text-xs leading-relaxed text-text-muted">
-          Google login is active. If Google rejects the redirect, add the current app URL plus{" "}
-          <span className="text-primary">/auth/google/callback</span> to the OAuth client&apos;s authorized redirect URIs. Demo mode remains available for paper trading.
+          Google login opens when OAuth credentials are configured. If they are unavailable, this button safely opens the Demo Terminal so you can continue paper trading. Configure Google OAuth later from Settings.
         </p>
       </div>
     </main>
